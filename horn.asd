@@ -4,8 +4,13 @@
 (defsystem :horn
   :description "A blog server to run on top of Whistle."
   :depends-on (:whistle
+               :comments
                :com.gigamonkeys.utilities
+               :com.gigamonkeys.markup
+               :alexandria
+               :monkeylib-markup-html
                :monkeylib-html
                :monkeylib-atom)
   :components ((:file "packages")
-               (:file "horn" :depends-on ("packages"))))
+               (:file "horn" :depends-on ("packages"))
+               (:file "markup-to-html" :depends-on ("packages"))))
