@@ -1,3 +1,6 @@
+;;; Copyright (c) 2012, Peter Seibel.
+;;; All rights reserved. See COPYING for details.
+
 (in-package :horn)
 
 ;; Given a directory containing the feed.sexp and entries.sexp files
@@ -16,15 +19,13 @@
 
 (defclass horn ()
   ((root :initarg :root :accessor root)
+   (comment-db :accessor comment-db)
    (feed :accessor the-feed)))
 
 (defmethod initialize-instance :after ((horn horn) &key &allow-other-keys)
-  (load-feed horn))
-
-(defun load-feed (horn)
-  (with-slots (feed root) horn
-    (setf feed (parse-feed (merge-pathnames "feed.sexp" root)))))
-
+  (with-slots (feed root comment-db) horn
+    (setf feed (parse-feed (merge-pathnames "feed.sexp" root)))
+    (setf comment-db (make-instance 'comments :root (merge-pathnames "comments/" root)))))
 
 (defmethod generate-response ((horn horn) request &key what year month date name category)
   (let ((feed (the-feed horn)))
@@ -44,7 +45,15 @@
       (:article
        (destructuring-bind (year month date) (mapcar #'parse-integer (list year month date))
          (with-response-body (s request)
-           (with-html-output (s) (render-article-html feed year month date name (request-path request)))))))))
+           (with-html-output (s)
+             (render-article-html
+              horn
+              feed year month date name
+              (request-path request)
+              (let ((x (cookie-value "comment_name" request)))
+                x))))))
+
+      (:post-comment (post-comment horn request)))))
 
 (defun render-index-html (feed &key category)
   (with-accessors ((title title) (entries entries) (feed-url feed-url)) feed
@@ -72,12 +81,7 @@
                    (render-body file)
                    (:p :class "updated" (:i "Last updated " (:print (format-iso-8601-time updated)) "."))))))))))))
 
-;; FIXME: this probably shows that we might want to configure one
-;; handler with references to another. I.e. instead of calling
-;; FIND-HANDLER to get the comment handler, when we configure the blog
-;; handler we should be able to pass it the comment handler and it can
-;; squirrel it away.
-(defun render-article-html (feed year month date name path)
+(defun render-article-html (horn feed year month date name path user-name)
   (with-accessors ((blog-title title) (feed-url feed-url) (index-url index-url)) feed
     (with-accessors ((file file)
                      (title title)
@@ -99,9 +103,8 @@
            (:p :class "dateline" (:print (human-date published)))
            (render-body file)
            (:p :class "updated" (:i "Last updated " (:print (format-iso-8601-time updated)) "."))
-           (:h2 "Comments")
-           (render-comments (find-handler *whistle-server* :comments) path t)
-           (comment-form path)))))))
+           (render-comments horn path t)
+           (comment-form path user-name)))))))
 
 (defun human-date (utc)
   (with-time (year month date hour minute day) utc

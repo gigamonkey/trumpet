@@ -7,10 +7,12 @@
                :comments
                :com.gigamonkeys.utilities
                :com.gigamonkeys.markup
-               :alexandria
+               :com.gigamonkeys.utilities
+               :cl-ppcre
                :monkeylib-markup-html
                :monkeylib-html
                :monkeylib-atom)
   :components ((:file "packages")
                (:file "horn" :depends-on ("packages"))
+               (:file "comments" :depends-on ("packages"))
                (:file "markup-to-html" :depends-on ("packages"))))
