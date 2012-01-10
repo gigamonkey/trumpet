@@ -24,8 +24,9 @@
 
 (defmethod initialize-instance :after ((horn horn) &key &allow-other-keys)
   (with-slots (feed root comment-db) horn
+    (setf root (merge-pathnames root))
     (setf feed (parse-feed (merge-pathnames "feed.sexp" root)))
-    (setf comment-db (make-instance 'comments :root (merge-pathnames "comments/" root)))))
+    (setf comment-db (open-comments-db (merge-pathnames "comments/" root) #'extract-features))))
 
 (defmethod generate-response ((horn horn) request &key what year month date name category)
   (let ((feed (the-feed horn)))
@@ -50,10 +51,17 @@
               horn
               feed year month date name
               (request-path request)
-              (let ((x (cookie-value "comment_name" request)))
-                x))))))
+              (cookie-value "comment_name" request))))))
 
-      (:post-comment (post-comment horn request)))))
+      (:post-comment (post-comment horn request))
+
+      (:classify-comment (spam-classifier horn request))
+
+      (:explain-comment (spam-explainer horn request))
+
+      (:spam-db (spam-db horn request))
+
+      (:spam-admin (spam-admin horn request)))))
 
 (defun render-index-html (feed &key category)
   (with-accessors ((title title) (entries entries) (feed-url feed-url)) feed
@@ -95,6 +103,8 @@
           (:head
            (:meta :http-equiv "Content-Type" :content "text/html; charset=UTF-8")
            (:title (:print (just-text title)))
+           (:script :src "/js/jquery-1.7.1.js")
+           (:script :src "/js/spam.js")
            (:link :rel "stylesheet" :type "text/css" :href "/css/blog.css")
            (:link :rel "alternate" :type "application/atom+xml" :href feed-url))
           (:body

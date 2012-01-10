@@ -5,6 +5,7 @@
   :description "A blog server to run on top of Whistle."
   :depends-on (:whistle
                :comments
+               :com.gigamonkeys.json
                :com.gigamonkeys.utilities
                :com.gigamonkeys.markup
                :com.gigamonkeys.utilities
