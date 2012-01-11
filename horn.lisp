@@ -105,8 +105,6 @@
           (:head
            (:meta :http-equiv "Content-Type" :content "text/html; charset=UTF-8")
            (:title (:print (just-text title)))
-           (:script :src "/js/jquery-1.7.1.js")
-           (:script :src "/js/spam.js")
            (:link :rel "stylesheet" :type "text/css" :href "/css/blog.css")
            (:link :rel "alternate" :type "application/atom+xml" :href feed-url))
           (:body

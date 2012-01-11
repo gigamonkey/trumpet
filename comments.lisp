@@ -160,21 +160,48 @@ name to pre-populate the Name input."
          (:h1 :id "header" "Comments")
          (:div :id "comments"))))))
 
-(defun spam-admin/next-batch (handler request &key (batch-size 20))
+(defparameter *admin-sessions* (make-hash-table))
+
+(defclass admin-session ()
+  ((unsent :initarg :unsent :accessor unsent)
+   (last-hit :initform (get-universal-time) :accessor last-hit)))
+
+(defun comments-with-scores (comments)
+  (sort
+   (mapcar
+    #'(lambda (c)
+        (multiple-value-bind (prediction score) (spamminess c)
+          (list c score prediction)))
+    comments)
+   #'spam-admin-<))
+
+(defun next-n-comments (n admin-session)
+  ;; Keep a list of unsent comments in the session. Each time we
+  ;; request a batch of comments sort the unsent comments and send the
+  ;; next N leaving unsent set to the remainder.
+  (let ((comments-with-scores (comments-with-scores (unsent admin-session))))
+    (let ((to-keep (nthcdr n comments-with-scores)))
+      (setf (unsent admin-session) (mapcar #'first to-keep))
+      (setf (last-hit admin-session) (get-universal-time))
+      (ldiff comments-with-scores to-keep))))
+
+(defun spam-admin/next-batch (handler request)
   "Render all the non-spam comments for the given request-path."
-  (with-slots (comment-db) handler
-    (let ((comments (sort
-                     (mapcar #'(lambda (c)
-                                 (multiple-value-bind (prediction score) (spamminess c)
-                                   (list c score prediction)))
-                             (comments-for-category comment-db :new))
-                     #'spam-admin-<)))
-      (with-response-body (s request)
-        (with-html-output (s)
-          ((:div :id "comments")
-           (loop for (comment score prediction) in
-                (ldiff comments (nthcdr batch-size comments))
-              do (emit-comment/spam-admin comment score prediction))))))))
+  (with-parameters ((session keyword)
+                    (n integer)) request
+    (let ((admin-session (gethash session *admin-sessions*)))
+      (unless admin-session
+        (setf admin-session
+              (setf (gethash session *admin-sessions*)
+                    (make-instance 'admin-session
+                      :unsent (comments-for-category (comment-db handler) :new)))))
+
+      (with-slots (comment-db) handler
+        (with-response-body (out request)
+          (with-html-output (out)
+            (:div
+             (loop for (comment score prediction) in (next-n-comments n admin-session)
+                do (emit-comment/spam-admin comment score prediction)))))))))
 
 (defun spam-admin-< (a b)
   (destructuring-bind (a-comment a-score a-prediction) a

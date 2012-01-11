@@ -5,15 +5,15 @@
 // TODO:
 // 1. add an undo on 'u' that declassifies the just classified comment and redisplays it.
 //
-// 2. pre-fetch the next batch (which requires some work on the server
-// side to not send comments that have already been sent.)
-//
-// 3. Put counts of messages left to classify in header and keep up to date.
+// 2. Put counts of messages left to classify in header and keep up to date.
 
 (function () {
 
+    var batchSize = 20;
+    var sessionID = new Date().getTime() + '-' + Math.floor(Math.random() * Math.pow(2, 53));
+
     function nextBatch () {
-        $.get("/comments/spam/admin/batch", renderBatch, "html");
+        $.get("/comments/spam/admin/batch", { 'session': sessionID, 'n': batchSize }, renderBatch, "html");
     }
 
     function renderBatch (data, textStatus) {
@@ -31,7 +31,7 @@
         toRemove.remove();
         setHeaderCount(header);
         selectFirst();
-        if ($('#comments').children('.comment').length == 0) {
+        if ($('#comments').children('.comment').length <= (batchSize/2)) {
             nextBatch();
         }
     }
