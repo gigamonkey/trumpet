@@ -61,7 +61,9 @@
 
       (:spam-db (spam-db horn request))
 
-      (:spam-admin (spam-admin horn request)))))
+      (:spam-admin (spam-admin horn request))
+
+      (:spam-admin-batch (spam-admin/next-batch horn request)))))
 
 (defun render-index-html (feed &key category)
   (with-accessors ((title title) (entries entries) (feed-url feed-url)) feed

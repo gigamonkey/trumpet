@@ -46,9 +46,6 @@ name to pre-populate the Name input."
          ((:div :class "comment-text")
           (loop for p in (paragraphize text) do (emit-html p))))))))
 
-
-
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Handlers
 
@@ -147,60 +144,70 @@ name to pre-populate the Name input."
                           (+ trained-count untrained-count) trained-count untrained-count))
             (feature-table (features-with-spamminess trained-features spam)))))))))
 
-
 (defun spam-admin (handler request)
+  (declare (ignore handler))
+  "Render the admin page which will request a batch of comments via Javascript."
+  (with-response-body (s request)
+    (with-html-output (s)
+      (:html
+        (:head
+         (:meta :http-equiv "Content-Type" :content "text/html; charset=UTF-8")
+         (:title "Spam Admin")
+         (:script :src "/js/jquery-1.7.1.js")
+         (:script :src "/js/spam.js")
+         (:link :rel "stylesheet" :type "text/css" :href "/css/blog.css"))
+        (:body
+         (:h1 :id "header" "Comments")
+         (:div :id "comments"))))))
+
+(defun spam-admin/next-batch (handler request &key (batch-size 20))
   "Render all the non-spam comments for the given request-path."
   (with-slots (comment-db) handler
-    (multiple-value-bind (ham spam unsure)
-        (loop for c in (sort (comments-for-category comment-db :new) #'< :key #'(lambda (x) (nth-value 1 (spamminess x))))
-           for prediction = (spamminess c)
-           when (eql prediction :ham) collect c into ham
-           when (eql prediction :spam) collect c into spam
-           when (eql prediction :unsure) collect c into unsure
-           finally (return (values ham spam unsure)))
+    (let ((comments (sort
+                     (mapcar #'(lambda (c)
+                                 (multiple-value-bind (prediction score) (spamminess c)
+                                   (list c score prediction)))
+                             (comments-for-category comment-db :new))
+                     #'spam-admin-<)))
+      (with-response-body (s request)
+        (with-html-output (s)
+          ((:div :id "comments")
+           (loop for (comment score prediction) in
+                (ldiff comments (nthcdr batch-size comments))
+              do (emit-comment/spam-admin comment score prediction))))))))
 
-      (flet ((emit-kind (label list)
-               (when list
-                 (html
-                   (:h1 :class "category-header" label)
-                   (loop for comment in list do (emit-comment/spam-admin comment))))))
-        (with-response-body (s request)
-          (with-html-output (s)
-            (:html
-              (:head
-               (:meta :http-equiv "Content-Type" :content "text/html; charset=UTF-8")
-               (:title "Spam Admin")
-               (:script :src "/js/jquery-1.7.1.js")
-               (:script :src "/js/spam.js")
-               (:link :rel "stylesheet" :type "text/css" :href "/css/blog.css"))
-                (:body
-                 (emit-kind "Ham" ham)
-                 (emit-kind "Unsure" unsure)
-                 (emit-kind "Spam" spam)))))))))
+(defun spam-admin-< (a b)
+  (destructuring-bind (a-comment a-score a-prediction) a
+    (declare (ignore a-prediction))
+    (destructuring-bind (b-comment b-score b-prediction) b
+      (declare (ignore b-prediction))
+      (cond
+        ((< a-score b-score) t)
+        ((> a-score b-score) nil)
+        (t (< (utc a-comment) (utc b-comment)))))))
 
-(defun emit-comment/spam-admin (comment)
+(defun emit-comment/spam-admin (comment spamminess classification)
   (let ((comment-id (id comment)))
-    (multiple-value-bind (classification spamminess) (spamminess comment)
-      (with-slots (utc path data) comment
-        (destructuring-bind (&key name text &allow-other-keys) data
-          (html
-            ((:div :id comment-id :class "comment")
-             (:p :class "comment-author" name)
+    (with-slots (utc path data) comment
+      (destructuring-bind (&key name text &allow-other-keys) data
+        (html
+          ((:div :id comment-id :class "comment")
+           (:p :class "comment-author" name)
 
-             ((:p :class "comment-date")
-              (:span :class "actual-date" (:print (format-comment-time utc)))
-              " "
-              (:span :class "time-ago" (:format "(~a)" (time-ago utc))))
-             ((:p :class "comment-path") "On: " path)
-             ((:div :class "comment-text")
-              (loop for p in (paragraphize text 200) do (emit-html p)))
-             ((:div :class "comment-footer")
-              ((:span :class "classifiers")
-               (:span :class "classification" (:print (string-capitalize classification)))
-               " "
-               (:span :class "spamminess" (:format "(~,2f)" spamminess))
-               " "
-               (:span :class "comment-id" comment-id))))))))))
+           ((:p :class "comment-date")
+            (:span :class "actual-date" (:print (format-comment-time utc)))
+            " "
+            (:span :class "time-ago" (:format "(~a)" (time-ago utc))))
+           ((:p :class "comment-path") "On: " path)
+           ((:div :class "comment-text")
+            (loop for p in (paragraphize text 200) do (emit-html p)))
+           ((:div :class "comment-footer")
+            ((:span :class "classifiers")
+             (:span :class "classification" (:print (string-capitalize classification)))
+             " "
+             (:span :class "spamminess" (:format "(~,2f)" spamminess))
+             " "
+             (:span :class "comment-id" comment-id)))))))))
 
 (defun feature-table (features-with-spamminess)
   (html

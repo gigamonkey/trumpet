@@ -2,7 +2,24 @@
  * Javascript for classifying spam.
  */
 
+// TODO:
+// 1. add an undo on 'u' that declassifies the just classified comment and redisplays it.
+//
+// 2. pre-fetch the next batch (which requires some work on the server
+// side to not send comments that have already been sent.)
+//
+// 3. Put counts of messages left to classify in header and keep up to date.
+
 (function () {
+
+    function nextBatch () {
+        $.get("/comments/spam/admin/batch", renderBatch, "html");
+    }
+
+    function renderBatch (data, textStatus) {
+        $('#comments').append($(data).children());
+        selectFirst();
+    }
 
     function classify (as, comment_id) {
         $.post("/comments/spam/classify", { as: as, comment_id: comment_id }, removeClassified, "json");
@@ -14,6 +31,9 @@
         toRemove.remove();
         setHeaderCount(header);
         selectFirst();
+        if ($('#comments').children('.comment').length == 0) {
+            nextBatch();
+        }
     }
 
     function explain (comment_id) {
@@ -75,8 +95,7 @@
 
     $(document).ready(function () {
         $(document).keypress(keyDispatcher);
-        setCounts();
-        selectFirst();
+        nextBatch();
     });
 
 })();
