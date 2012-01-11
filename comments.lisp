@@ -19,7 +19,7 @@ name to pre-populate the Name input."
          (:textarea :id "comment-text" :name "text" :tabindex 4))
      (:p (:input :type "submit" :value "Submit")))))
 
-(defun render-comments (handler request-path administrator-p)
+(defun render-comments (handler request-path)
   "Render all the non-spam comments for the given request-path."
   (with-slots (comment-db) handler
     (let ((comments (comments-for-path comment-db request-path :filter #'exclude-probable-spam)))
@@ -31,37 +31,20 @@ name to pre-populate the Name input."
          ((:div :id "comments")
           (loop for comment in comments
              for i from 0
-             do (emit-comment comment i administrator-p))))))))
+             do (emit-comment comment i))))))))
 
-(defun emit-comment (comment i administrator-p)
-  (let ((comment-id (id comment))
-        (div-id (format nil "spamspan_~d" i)))
-    (multiple-value-bind (classification spamminess explicit) (spamminess comment)
-      (with-slots (utc path data) comment
-        (destructuring-bind (&key name text &allow-other-keys) data
-          (html
-            ((:div :id div-id :class (:format "comment ~[even~;odd~]" (mod i 2)))
-             (:p :class "comment-author" name)
-             ((:p :class "comment-date")
-              (:span :class "actual-date" (:print (format-comment-time utc)))
-              " "
-              (:span :class "time-ago" (:format "(~a)" (time-ago utc))))
-             ((:div :class "comment-text")
-              (loop for p in (paragraphize text) do (emit-html p)))
-             (when (and administrator-p (not explicit))
-               (html
-                 ((:div :class "comment-footer")
-                  ((:span :class "classifiers")
-                   ((:a :href (:format "javascript:explain('~a', '~a')" comment-id div-id))
-                    (:span :class "spamminess" (:format "(Spamminess: ~,2f)" spamminess))) " "
-                   "Mark as: "
-                   ((:a :class (:print (if (eql classification :spam) "predicted" "not-predicted"))
-                        :href (:format "javascript:classify('spam', '~a', '~a')" comment-id div-id))
-                    "Spam"))
-                   " | "
-                  ((:a :class (:print (if (eql classification :ham) "predicted" "not-predicted"))
-                       :href (:format "javascript:classify('ham', '~a', '~a')" comment-id div-id))
-                   "Ham")))))))))))
+(defun emit-comment (comment i)
+  (with-slots (utc path data) comment
+    (destructuring-bind (&key name text &allow-other-keys) data
+      (html
+        ((:div :class (:format "comment ~[even~;odd~]" (mod i 2)))
+         (:p :class "comment-author" name)
+         ((:p :class "comment-date")
+          (:span :class "actual-date" (:print (format-comment-time utc)))
+          " "
+          (:span :class "time-ago" (:format "(~a)" (time-ago utc))))
+         ((:div :class "comment-text")
+          (loop for p in (paragraphize text) do (emit-html p))))))))
 
 
 
@@ -108,15 +91,11 @@ name to pre-populate the Name input."
 (defun spam-classifier (blog request)
   "Classify a new comment."
   (with-parameters ((as keyword)
-                    (comment_id string)
-                    (div_id string)) request
-    (let ((comment (find-comment (comment-db blog) comment_id)))
+                    (comment_id string)) request
+    (when-let ((comment (find-comment (comment-db blog) comment_id)))
       (classify-comment comment as)
       (with-response-body (s request :content-type "application/json")
-        (let ((resp `(:as ,(string-downcase as) :div_id ,div_id)))
-          ;;(break "About to send json response ~a" (json resp))
-          (write-json resp s))))))
-
+        (write-json `(:as ,(string-downcase as) :comment_id ,comment_id) s)))))
 
 ;;; AJAX thingy for getting an explanation of the spam score of a
 ;;; comment.
@@ -173,13 +152,18 @@ name to pre-populate the Name input."
   "Render all the non-spam comments for the given request-path."
   (with-slots (comment-db) handler
     (multiple-value-bind (ham spam unsure)
-        (loop for c in (sort (comments-for-category comment-db :new) #'> :key #'utc)
+        (loop for c in (sort (comments-for-category comment-db :new) #'< :key #'(lambda (x) (nth-value 1 (spamminess x))))
            for prediction = (spamminess c)
            when (eql prediction :ham) collect c into ham
            when (eql prediction :spam) collect c into spam
            when (eql prediction :unsure) collect c into unsure
            finally (return (values ham spam unsure)))
-      (let ((i 0))
+
+      (flet ((emit-kind (label list)
+               (when list
+                 (html
+                   (:h1 :class "category-header" label)
+                   (loop for comment in list do (emit-comment/spam-admin comment))))))
         (with-response-body (s request)
           (with-html-output (s)
             (:html
@@ -189,25 +173,20 @@ name to pre-populate the Name input."
                (:script :src "/js/jquery-1.7.1.js")
                (:script :src "/js/spam.js")
                (:link :rel "stylesheet" :type "text/css" :href "/css/blog.css"))
-              (:body
-               (:h1 "Ham" (:format " (~:d comment~:p)" (length ham)))
-               (loop for comment in ham do (emit-comment/spam-admin comment (incf i)))
+                (:body
+                 (emit-kind "Ham" ham)
+                 (emit-kind "Unsure" unsure)
+                 (emit-kind "Spam" spam)))))))))
 
-               (:h1 "Unsure" (:format " (~:d comment~:p)" (length unsure)))
-               (loop for comment in unsure do (emit-comment/spam-admin comment (incf i)))
-
-               (:h1 "Spam" (:format " (~:d comment~:p)" (length spam)))
-               (loop for comment in spam do (emit-comment/spam-admin comment (incf i)))))))))))
-
-(defun emit-comment/spam-admin (comment i)
-  (let ((comment-id (id comment))
-        (div-id (format nil "spamspan_~d" i)))
+(defun emit-comment/spam-admin (comment)
+  (let ((comment-id (id comment)))
     (multiple-value-bind (classification spamminess) (spamminess comment)
       (with-slots (utc path data) comment
         (destructuring-bind (&key name text &allow-other-keys) data
           (html
-            ((:div :id div-id :class (:format "comment ~[even~;odd~]" (mod i 2)))
+            ((:div :id comment-id :class "comment")
              (:p :class "comment-author" name)
+
              ((:p :class "comment-date")
               (:span :class "actual-date" (:print (format-comment-time utc)))
               " "
@@ -217,16 +196,11 @@ name to pre-populate the Name input."
               (loop for p in (paragraphize text 200) do (emit-html p)))
              ((:div :class "comment-footer")
               ((:span :class "classifiers")
-               ((:a :href (:format "javascript:explain('~a', '~a')" comment-id div-id))
-                (:span :class "spamminess" (:format "(Spamminess: ~,2f)" spamminess))) " "
-               "Mark as: "
-               ((:a :class (:print (if (eql classification :spam) "predicted" "not-predicted"))
-                    :href (:format "javascript:classify('spam', '~a', '~a')" comment-id div-id))
-                "Spam"))
-              " | "
-              ((:a :class (:print (if (eql classification :ham) "predicted" "not-predicted"))
-                   :href (:format "javascript:classify('ham', '~a', '~a')" comment-id div-id))
-               "Ham")))))))))
+               (:span :class "classification" (:print (string-capitalize classification)))
+               " "
+               (:span :class "spamminess" (:format "(~,2f)" spamminess))
+               " "
+               (:span :class "comment-id" comment-id))))))))))
 
 (defun feature-table (features-with-spamminess)
   (html

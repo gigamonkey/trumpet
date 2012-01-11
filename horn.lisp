@@ -113,7 +113,7 @@
            (:p :class "dateline" (:print (human-date published)))
            (render-body file)
            (:p :class "updated" (:i "Last updated " (:print (format-iso-8601-time updated)) "."))
-           (render-comments horn path t)
+           (render-comments horn path)
            (comment-form path user-name)))))))
 
 (defun human-date (utc)
