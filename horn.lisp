@@ -57,6 +57,8 @@
 
       (:classify-comment (spam-classifier horn request))
 
+      (:declassify-comment (spam-declassifier horn request))
+
       (:explain-comment (spam-explainer horn request))
 
       (:spam-db (spam-db horn request))

@@ -3,14 +3,15 @@
  */
 
 // TODO:
-// 1. add an undo on 'u' that declassifies the just classified comment and redisplays it.
 //
-// 2. Put counts of messages left to classify in header and keep up to date.
+// 1. Put counts of messages left to classify in header and keep up to date.
 
 (function () {
 
     var batchSize = 20;
     var sessionID = new Date().getTime() + '-' + Math.floor(Math.random() * Math.pow(2, 53));
+
+    var latestCommentClassified = false;
 
     function nextBatch () {
         $.get("/comments/spam/admin/batch", { 'session': sessionID, 'n': batchSize }, renderBatch, "html");
@@ -21,12 +22,25 @@
         selectFirst();
     }
 
-    function classify (as, comment_id) {
-        $.post("/comments/spam/classify", { as: as, comment_id: comment_id }, removeClassified, "json");
+    function classify (as, id) {
+        latestCommentClassified = id;
+        $.post("/comments/spam/classify", { as: as, id: id }, removeClassified, "json");
     }
 
+    function declassifyMostRecent() {
+        if (latestCommentClassified) {
+            declassify(latestCommentClassified);
+            latestCommentClassified = false;
+        }
+    }
+
+    function declassify (id) {
+        $.post("/comments/spam/declassify", { id: id }, restoreDeclassified, "html");
+    }
+
+
     function removeClassified (data, textStatus) {
-        var toRemove = findComment(data.comment_id);
+        var toRemove = findComment(data.id);
         var header = toRemove.prevAll('.category-header').first();
         toRemove.remove();
         setHeaderCount(header);
@@ -36,10 +50,15 @@
         }
     }
 
-    function explain (comment_id) {
-        var comment = findComment(comment_id);
+    function restoreDeclassified (data, textStatus) {
+        $('#comments').prepend(data);
+        selectFirst();
+    }
+
+    function explain (id) {
+        var comment = findComment(id);
         if (comment.children('.spam-explanation').length == 0) {
-            $.post("/comments/spam/explain", { comment_id: comment_id }, explainer(comment), "html");
+            $.post("/comments/spam/explain", { id: id }, explainer(comment), "html");
         } else {
             comment.children('.spam-explanation').remove();
         }
@@ -55,9 +74,9 @@
         return $('.selected').find('.comment-id').first().text();
     }
 
-    function findComment (comment_id) {
+    function findComment (id) {
         return $('.comment').filter(function (index) {
-            return $(this).find('.comment-id').first().text() === comment_id;
+            return $(this).find('.comment-id').first().text() === id;
         });
     }
 
@@ -84,12 +103,15 @@
             classify('ham', selectedID());
         } else if (e.which == 'e'.charCodeAt(0)) {
             explain(selectedID());
+        } else if (e.which == 'u'.charCodeAt(0)) {
+            declassifyMostRecent();
         } else {
             alert('e.which: ' + e.which);
         }
     }
 
     function selectFirst () {
+        $('.selected').removeClass('selected');
         $('.comment').first().addClass('selected');
     }
 

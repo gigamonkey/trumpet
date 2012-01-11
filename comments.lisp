@@ -88,11 +88,21 @@ name to pre-populate the Name input."
 (defun spam-classifier (blog request)
   "Classify a new comment."
   (with-parameters ((as keyword)
-                    (comment_id string)) request
-    (when-let ((comment (find-comment (comment-db blog) comment_id)))
+                    (id string)) request
+    (when-let ((comment (find-comment (comment-db blog) id)))
       (classify-comment comment as)
       (with-response-body (s request :content-type "application/json")
-        (write-json `(:as ,(string-downcase as) :comment_id ,comment_id) s)))))
+        (write-json `(:as ,(string-downcase as) :id ,id) s)))))
+
+(defun spam-declassifier (blog request)
+  "Declassify a comment."
+  (with-parameters ((id string)) request
+    (when-let ((comment (find-comment (comment-db blog) id)))
+      (declassify-comment comment)
+      (with-response-body (s request)
+        (with-html-output (s)
+          (multiple-value-bind (prediction score) (spamminess comment)
+            (emit-comment/spam-admin comment score prediction)))))))
 
 ;;; AJAX thingy for getting an explanation of the spam score of a
 ;;; comment.
