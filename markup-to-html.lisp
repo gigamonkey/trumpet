@@ -1,7 +1,7 @@
 ;;; Copyright (c) 2012, Peter Seibel.
 ;;; All rights reserved. See COPYING for details.
 
-(in-package :horn)
+(in-package :trumpet)
 
 (defparameter *tag-mappings*
   '((:math             . :i)

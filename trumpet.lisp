@@ -1,7 +1,7 @@
 ;;; Copyright (c) 2012, Peter Seibel.
 ;;; All rights reserved. See COPYING for details.
 
-(in-package :horn)
+(in-package :trumpet)
 
 ;; Given a directory containing the feed.sexp and entries.sexp files
 ;; and a content/ directory feed up.
@@ -17,19 +17,19 @@
 ;; Sholud also provide commenting on individual articles (with
 ;; information about the number of comments on the main page).
 
-(defclass horn ()
+(defclass blog-handler ()
   ((root :initarg :root :accessor root)
    (comment-db :accessor comment-db)
    (feed :accessor the-feed)))
 
-(defmethod initialize-instance :after ((horn horn) &key &allow-other-keys)
-  (with-slots (feed root comment-db) horn
+(defmethod initialize-instance :after ((blog blog-handler) &key &allow-other-keys)
+  (with-slots (feed root comment-db) blog
     (setf root (merge-pathnames root))
     (setf feed (parse-feed (merge-pathnames "feed.sexp" root)))
     (setf comment-db (open-comments-db (merge-pathnames "comments/" root) #'extract-features))))
 
-(defmethod generate-response ((horn horn) request &key what year month date name category)
-  (let ((feed (the-feed horn)))
+(defmethod generate-response ((blog blog-handler) request &key what year month date name category)
+  (let ((feed (the-feed blog)))
     (ecase what
       (:feed
        (with-response-body (s request :content-type "application/atom+xml")
@@ -48,24 +48,24 @@
          (with-response-body (s request)
            (with-html-output (s)
              (render-article-html
-              horn
+              blog
               feed year month date name
               (request-path request)
               (cookie-value "comment_name" request))))))
 
-      (:post-comment (post-comment horn request))
+      (:post-comment (post-comment blog request))
 
-      (:classify-comment (spam-classifier horn request))
+      (:classify-comment (spam-classifier blog request))
 
-      (:declassify-comment (spam-declassifier horn request))
+      (:declassify-comment (spam-declassifier blog request))
 
-      (:explain-comment (spam-explainer horn request))
+      (:explain-comment (spam-explainer blog request))
 
-      (:spam-db (spam-db horn request))
+      (:spam-db (spam-db blog request))
 
-      (:spam-admin (spam-admin horn request))
+      (:spam-admin (spam-admin blog request))
 
-      (:spam-admin-batch (spam-admin/next-batch horn request)))))
+      (:spam-admin-batch (spam-admin/next-batch blog request)))))
 
 (defun render-index-html (feed &key category)
   (with-accessors ((title title) (entries entries) (feed-url feed-url)) feed
@@ -93,7 +93,7 @@
                    (render-body file)
                    (:p :class "updated" (:i "Last updated " (:print (format-iso-8601-time updated)) "."))))))))))))
 
-(defun render-article-html (horn feed year month date name path user-name)
+(defun render-article-html (blog feed year month date name path user-name)
   (with-accessors ((blog-title title) (feed-url feed-url) (index-url index-url)) feed
     (with-accessors ((file file)
                      (title title)
@@ -115,7 +115,7 @@
            (:p :class "dateline" (:print (human-date published)))
            (render-body file)
            (:p :class "updated" (:i "Last updated " (:print (format-iso-8601-time updated)) "."))
-           (render-comments horn path)
+           (render-comments blog path)
            (comment-form path user-name)))))))
 
 (defun human-date (utc)

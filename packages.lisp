@@ -3,7 +3,7 @@
 
 (in-package :cl-user)
 
-(defpackage :horn
+(defpackage :trumpet
   (:use
    :cl
    :whistle
