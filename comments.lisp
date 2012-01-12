@@ -22,8 +22,7 @@ name to pre-populate the Name input."
 (defun render-comments (handler request-path)
   "Render all the non-spam comments for the given request-path."
   (with-slots (comment-db) handler
-    (let ((comments (comments-for-path comment-db request-path)))
-      (setf comments (sort comments #'< :key #'utc))
+    (let ((comments (sort (collect-comments comment-db :path request-path) #'< :key #'utc)))
       (html
         ((:div :class "comments")
          ((:h2 :class "comment-count")
@@ -191,12 +190,13 @@ name to pre-populate the Name input."
   "Render all the non-spam comments for the given request-path."
   (with-parameters ((session keyword)
                     (n integer)) request
-    (let ((admin-session (gethash session *admin-sessions*)))
+    (let ((admin-session (gethash session *admin-sessions*))
+          (db (comment-db handler)))
       (unless admin-session
         (setf admin-session
               (setf (gethash session *admin-sessions*)
                     (make-instance 'admin-session
-                      :unsent (comments-for-classification (comment-db handler) :new)))))
+                      :unsent (collect-comments db :classification :new)))))
 
       (with-slots (comment-db) handler
         (with-response-body (out request)
