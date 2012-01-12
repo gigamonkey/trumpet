@@ -15,6 +15,7 @@
    :cl-ppcre
    :monkeylib-atom
    :monkeylib-html
+   :com.gigamonkeys.spam
    :com.gigamonkeys.markup
    :com.gigamonkeys.markup.html
    :com.gigamonkeys.markup.html.handy-tags)

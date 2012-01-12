@@ -22,7 +22,7 @@ name to pre-populate the Name input."
 (defun render-comments (handler request-path)
   "Render all the non-spam comments for the given request-path."
   (with-slots (comment-db) handler
-    (let ((comments (comments-for-path comment-db request-path :filter #'exclude-probable-spam)))
+    (let ((comments (comments-for-path comment-db request-path)))
       (setf comments (sort comments #'< :key #'utc))
       (html
         ((:div :class "comments")
@@ -107,38 +107,30 @@ name to pre-populate the Name input."
 ;;; AJAX thingy for getting an explanation of the spam score of a
 ;;; comment.
 
-(defun features-with-spamminess (features spam)
-  (loop for f in features collect (cons f (spam::bayesian-spam-probability f spam))))
-
 (defun spam-explainer (blog request)
   (with-slots (comment-db) blog
-    (with-slots (spam) comment-db
-      (with-parameters ((comment_id string)) request
-        (let* ((comment (find-comment comment-db comment_id))
-               (features (remove-if #'spam::untrained-p (intern-features comment))))
-          (multiple-value-bind (classification score) (spamminess comment)
-            (with-response-body (s request)
-              (with-html-output (s)
-                ((:div :class "spam-explanation")
-                 (:h1 (:format "Classification: ~a; score: ~,5f~%" classification score))
-                 (if features
-                     (feature-table (features-with-spamminess features spam))
-                     (html (:h2 "No features of message found in database")))
-                 (:p :class "click-instructions" "Click anywhere in box to hide."))))))))))
+    (with-parameters ((id string)) request
+      (let ((comment (find-comment comment-db id)))
+        (multiple-value-bind (classification score) (spamminess comment)
+          (with-response-body (s request)
+            (with-html-output (s)
+              ((:div :class "spam-explanation")
+               (:h1 (:format "Classification: ~a; score: ~,5f~%" classification score))
+               (feature-table (spam-features comment))
+               (:p :class "click-instructions" "Click anywhere in box to hide.")))))))))
 
 
 (defun spam-db (blog request)
   (let ((trained-features ())
         (trained-count 0)
         (untrained-count 0)
-        (title "Spam DB")
-        (spam (spam (comment-db blog))))
-    (loop for f being the hash-values of (spam::features spam)
+        (title "Spam DB"))
+    (loop for f in (all-spam-features (comment-db blog))
        when (spam::untrained-p f) do
-         (incf untrained-count)
+       (incf untrained-count)
        else do
-         (push f trained-features)
-         (incf trained-count))
+       (push f trained-features)
+       (incf trained-count))
 
     (with-response-body (s request)
       (with-html-output (s)
@@ -152,7 +144,7 @@ name to pre-populate the Name input."
            ((:div :class "spam-explanation")
             (:h1 (:format "~d feature~:p (~:d trained; ~:d untrained)"
                           (+ trained-count untrained-count) trained-count untrained-count))
-            (feature-table (features-with-spamminess trained-features spam)))))))))
+            (feature-table trained-features))))))))
 
 (defun spam-admin (handler request)
   (declare (ignore handler))
@@ -204,7 +196,7 @@ name to pre-populate the Name input."
         (setf admin-session
               (setf (gethash session *admin-sessions*)
                     (make-instance 'admin-session
-                      :unsent (comments-for-category (comment-db handler) :new)))))
+                      :unsent (comments-for-classification (comment-db handler) :new)))))
 
       (with-slots (comment-db) handler
         (with-response-body (out request)
@@ -237,7 +229,7 @@ name to pre-populate the Name input."
             (:span :class "time-ago" (:format "(~a)" (time-ago utc))))
            ((:p :class "comment-path") "On: " path)
            ((:div :class "comment-text")
-            (loop for p in (paragraphize text 200) do (emit-html p)))
+            (loop for p in (paragraphize text) do (emit-html p)))
            ((:div :class "comment-footer")
             ((:span :class "classifiers")
              (:span :class "classification" (:print (string-capitalize classification)))
@@ -246,7 +238,7 @@ name to pre-populate the Name input."
              " "
              (:span :class "comment-id" comment-id)))))))))
 
-(defun feature-table (features-with-spamminess)
+(defun feature-table (features)
   (html
     (:table
      (:tr
@@ -255,7 +247,7 @@ name to pre-populate the Name input."
       (:th "# Hams")
       (:th "# Spams")
       (:th "Spamminess"))
-     (dolist (f (sort features-with-spamminess #'> :key #'cdr))
+     (dolist (f (sort (features-with-spamminess features) #'spamminess> :key #'cdr))
        (destructuring-bind (feature . spamminess) f
          (with-slots (spam::id spam::hams spam::spams) feature
            (html
@@ -264,7 +256,12 @@ name to pre-populate the Name input."
               (:td (:format "~s" (unlist (rest spam::id))))
               (:td spam::hams)
               (:td spam::spams)
-              (:td (:format "~,f" spamminess))))))))))
+              (:td (:format "~:[-~;~:*~,f~]" spamminess))))))))))
+
+(defun features-with-spamminess (features)
+  (loop for f in features collect (cons f (feature-spamminess f))))
+
+(defun spamminess> (a b) (> (or a 0) (or b 0)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Basic formatting -- turning submitted text into Markup and
@@ -311,13 +308,24 @@ name to pre-populate the Name input."
     (let ((features ()))
       (push `(:name ,name) features)
       (loop for word in (extract-words text) do (push `(:word ,word) features))
+      (loop for url in (extract-urls text) do (push `(:url ,url) features))
       (loop for (key . value) in cookies do (push `(:cookie ,key ,value) features))
       features)))
 
-(defparameter *word-regex* (create-scanner "[a-z]{3,}" :case-insensitive-mode t))
+;;(defparameter *word-regex* (create-scanner "[a-z]{3,}" :case-insensitive-mode t))
+(defparameter *word-regex* (create-scanner "\\w{3,}" :case-insensitive-mode t))
+
 
 (defun extract-words (text)
   "Simple function to extract words from a text."
   (delete-duplicates
    (mapcar #'string-downcase (all-matches-as-strings *word-regex* text))
    :test #'string=))
+
+(defparameter *url-regex* (create-scanner "http://\\w+" :case-insensitive-mode t))
+
+;; From: http://daringfireball.net/2010/07/improved_regex_for_matching_urls
+(defparameter *url-regex* (create-scanner "(?i)\\b((?:[a-z][\\w-]+:(?:/{1,3}|[a-z0-9%])|www\\d{0,3}[.]|[a-z0-9.\\-]+[.][a-z]{2,4}/)(?:[^\\s()<>]+|\\(([^\\s()<>]+|(\\([^\\s()<>]+\\)))*\\))+(?:\\(([^\\s()<>]+|(\\([^\\s()<>]+\\)))*\\)|[^\\s`!()\\[\\]{};:'\".,<>?«»“”‘’]))"))
+
+(defun extract-urls (text)
+  (delete-duplicates (all-matches-as-strings *url-regex* text) :test #'string=))
