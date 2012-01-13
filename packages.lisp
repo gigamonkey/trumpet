@@ -21,4 +21,6 @@
    :com.gigamonkeys.markup.html.handy-tags)
 
   (:import-from :com.gigamonkeys.markup.html.handy-tags :amazon-link :amazon-image-bug)
-  )
+
+  (:export
+   :blog-handler))

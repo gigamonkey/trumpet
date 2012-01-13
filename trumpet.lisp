@@ -37,21 +37,36 @@
 
       (:index
        (with-response-body (s request)
-         (with-html-output (s) (render-index-html feed))))
+         (with-html-output (s)
+           (index-page
+            :title (title feed)
+            :feed-url (feed-url feed)
+            :entries (entries feed)))))
 
       (:by-category
        (with-response-body (s request)
-         (with-html-output (s) (render-index-html feed :category category))))
+         (with-html-output (s)
+           (index-page
+            :title (title feed)
+            :feed-url (feed-url feed)
+            :entries (entries feed)
+            :category category))))
 
       (:article
        (destructuring-bind (year month date) (mapcar #'parse-integer (list year month date))
-         (with-response-body (s request)
-           (with-html-output (s)
-             (render-article-html
-              blog
-              feed year month date name
-              (request-path request)
-              (cookie-value "comment_name" request))))))
+         (let ((entry (find-entry feed year month date name)))
+           (with-response-body (s request)
+             (with-html-output (s)
+               (article-page
+                :blog blog
+                :blog-title (title feed)
+                :feed-url (feed-url feed)
+                :title (title entry)
+                :file (file entry)
+                :published (published entry)
+                :updated (updated entry)
+                :path (request-path request)
+                :user-name (cookie-value "comment_name" request)))))))
 
       (:post-comment (post-comment blog request))
 
@@ -63,66 +78,12 @@
 
       (:spam-db (spam-db blog request))
 
-      (:spam-admin (spam-admin blog request))
+      (:spam-admin
+       (with-response-body (s request)
+         (with-html-output (s)
+           (spam-admin-page))))
 
       (:spam-admin-batch (spam-admin/next-batch blog request)))))
-
-(defun render-index-html (feed &key category)
-  (with-accessors ((title title) (entries entries) (feed-url feed-url)) feed
-    (html
-      (:html
-        (:head
-         (:meta :http-equiv "Content-Type" :content "text/html; charset=UTF-8")
-         (:title title)
-         (:link :rel "stylesheet" :type "text/css" :href "/css/blog.css")
-         (:link :rel "alternate" :type "application/atom+xml" :title title :href feed-url))
-        (:body
-         (:h1 title)
-         (dolist (entry entries)
-           (when (or (not category) (member category (categories entry) :test #'string=))
-             (with-accessors ((file file)
-                              (title title)
-                            (published published)
-                              (updated updated)
-                              (categories categories))
-                 entry
-               (with-time (year month date) published
-                 (html
-                   (:a :href (:format "/blog/~a" (permalink (pathname-name file) year month date)) (:h2 (emit-html title)))
-                   (:p :class "dateline" (:print (human-date published)))
-                   (render-body file)
-                   (:p :class "updated" (:i "Last updated " (:print (format-iso-8601-time updated)) "."))))))))))))
-
-(defun render-article-html (blog feed year month date name path user-name)
-  (with-accessors ((blog-title title) (feed-url feed-url) (index-url index-url)) feed
-    (with-accessors ((file file)
-                     (title title)
-                     (published published)
-                     (updated updated)
-                     (categories categories)
-                     (body body))
-        (find-entry feed year month date name)
-      (html
-        (:html
-          (:head
-           (:meta :http-equiv "Content-Type" :content "text/html; charset=UTF-8")
-           (:title (:print (just-text title)))
-           (:link :rel "stylesheet" :type "text/css" :href "/css/blog.css")
-           (:link :rel "alternate" :type "application/atom+xml" :href feed-url))
-          (:body
-           (:a :href "/blog/" (:h1 blog-title))
-           (:h2 (emit-html title))
-           (:p :class "dateline" (:print (human-date published)))
-           (render-body file)
-           (:p :class "updated" (:i "Last updated " (:print (format-iso-8601-time updated)) "."))
-           (render-comments blog path)
-           (comment-form path user-name)))))))
-
-(defun human-date (utc)
-  (with-time (year month date hour minute day) utc
-    (let ((pm-p (> hour 12)))
-      (format nil "~a, ~d ~a ~d, ~d:~2,'0d ~:[am~;pm~] in Berkeley, California, USA"
-              (day-name day) date (month-name month) year (mod hour 12) minute pm-p))))
 
 (defun find-entry (feed year month date name)
   (let ((key (list year month date name)))
