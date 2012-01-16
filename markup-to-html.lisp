@@ -19,6 +19,7 @@
     (:signature        . (:div :class "signature"))
     (:news             . (:div :class "news"))
     (:intro            . (:div :class "intro"))
+    (:update           . (:div :class "update"))
 
     ;; Spans.
     (:n                . (:span :class "name"))
