@@ -14,7 +14,7 @@
 ;;
 ;; 4. A list of archived articles in various ways.
 ;;
-;; Sholud also provide commenting on individual articles (with
+;; Should also provide commenting on individual articles (with
 ;; information about the number of comments on the main page).
 
 (defclass blog-handler ()
