@@ -23,4 +23,6 @@
   (:import-from :com.gigamonkeys.markup.html.handy-tags :amazon-link :amazon-image-bug)
 
   (:export
-   :blog-handler))
+   :blog-handler
+   :define-template
+   :comment-db))
