@@ -18,41 +18,11 @@
 (define-html-macro javascript (src)
   `(:script :src ,src :type "text/javascript"))
 
-(define-html-macro header ()
-  `((:header)
-    ((:a :href "/blog/")
-     ((:hgroup :class "branding")
-      (:h1 "A billion monkeys can't be wrong")
-      (:h2 "If you put a billion monkeys at a billion typewriters ...")))
-    #+(or)(:nav
-     #+(or)(:ul
-      (:li (:a :href "/about/" "About"))
-      (:li (:a :href "/write/" "Submissions")))
-     (:input :type "text" :placeholder "Search" :class "search"))))
-
-(define-html-macro footer ()
-  `(:footer (:p "Copyright 2007-2012, Peter Seibel")))
-
-(define-html-macro sidebar ()
-  `((:aside :class "sidebar")
-    (:h1 "Me")
-    (:p (:img :src "/img/headshot.jpg"))
-    (:p (:a :href "mailto:peter@gigamonkeys.com" "peter@gigamonkeys.com"))
-    (:p (:a :href "http://twitter.com/peterseibel" "twitter: peterseibel"))
-    (:p (:a :href "http://github.com/gigamonkey" "github: gigamonkey"))
-    (:h1 "My books")
-    (:p (:img :src "/img/pcl-cover.gif"))
-    (:p (:img :src "/img/coders-at-work-cover.gif"))
-    (:h1 "Categories")
-    (:h2 (:a :href "/blog/writing/" "writing"))
-    (:h2 (:a :href "/blog/parenthood/" "parenthood"))
-    (:h2 (:a :href "/blog/lisp/" "lisp"))))
-
 (define-html-macro standard-page ((&key
+                                   title
                                    author
                                    description
-                                   title
-                                   sidebar
+                                   categories
                                    (extra-head '(:progn)))
                                   &body body)
   `(:progn
@@ -71,11 +41,30 @@
        ,extra-head)
       (:body
        ((:div :class "wrap")
-        (header)
-        (when ,sidebar (html (sidebar)))
-        (:div :class "contents"
-        ,@body)
-        (footer))
+
+        (:header
+         ((:a :href "/blog/")
+          ((:hgroup :class "branding")
+           (:h1 "A billion monkeys can't be wrong")
+           (:h2 "If you put a billion monkeys at a billion typewriters ..."))))
+
+        ((:aside :class "sidebar")
+         (:h1 "Me")
+         (:p (:img :src "/img/headshot.jpg"))
+         (:p (:a :href "mailto:peter@gigamonkeys.com" "peter@gigamonkeys.com"))
+         (:p (:a :href "http://twitter.com/peterseibel" "twitter: peterseibel"))
+         (:p (:a :href "http://github.com/gigamonkey" "github: gigamonkey"))
+         (:h1 "My books")
+         (:p (:img :src "/img/pcl-cover.gif"))
+         (:p (:img :src "/img/coders-at-work-cover.gif"))
+         (:h1 "Categories")
+         (loop for category in ,categories do
+              (html (:h2 (:a :href (:format "/blog/~a" category) category)))))
+
+        (:div :class "contents" ,@body)
+
+        (:footer (:p "Copyright 2007-2012, Peter Seibel")))
+
        (:script :type "text/javascript" (:noescape  *google-analytics-code*))))))
 
 (define-template index-page (title feed-url entries categories &optional category)
@@ -85,7 +74,7 @@
                          (:progn (:link :rel "alternate" :type "application/atom+xml" :title title :href feed-url))
                          :author "Peter Seibel"
                          :description "Peter Seibel's blog"
-                         :sidebar t)
+                         :categories categories)
                  (dolist (entry entries)
                    (when (or (not category) (member category (categories entry) :test #'string=))
                      (with-time (year month date) (published entry)
@@ -97,14 +86,14 @@
                         :updated (updated entry)))))))
 
 
-(define-template article-page (blog-title feed-url title file published updated blog path user-name)
+(define-template article-page (blog-title feed-url title file published updated blog path user-name categories)
   "One article."
   (declare (ignore blog-title feed-url))
   (standard-page (:title (:print (just-text title))
                          :author "Peter Seibel"
                          :description "Peter Seibel's blog"
-                         :sidebar t)
-    (article-html
+                         :categories categories)
+                 (article-html
      :title title
      :file file
      :published published
@@ -119,6 +108,7 @@
 
 (define-template article-html (title file published updated &optional title-link)
   "A single article."
+  (declare (ignore updated))
   (:article
    (if title-link
        (html (:h2 (:a :href title-link (emit-html title))))

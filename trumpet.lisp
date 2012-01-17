@@ -25,7 +25,7 @@
 (defmethod initialize-instance :after ((blog blog-handler) &key &allow-other-keys)
   (with-slots (feed root comment-db) blog
     (setf root (merge-pathnames root))
-    (setf feed (parse-feed (merge-pathnames "feed.sexp" root)))
+    (setf feed (parse-feed (merge-pathnames "content/feed.sexp" root)))
     (setf comment-db (open-comments-db (merge-pathnames "comments/" root) #'extract-features))))
 
 (defmethod generate-response ((blog blog-handler) request &key what year month date name category)
@@ -41,7 +41,8 @@
            (index-page
             :title (title feed)
             :feed-url (feed-url feed)
-            :entries (entries feed)))))
+            :entries (entries feed)
+            :categories (categories feed)))))
 
       (:by-category
        (with-response-body (s request)
@@ -50,7 +51,8 @@
             :title (title feed)
             :feed-url (feed-url feed)
             :entries (entries feed)
-            :category category))))
+            :category category
+            :categories (categories feed)))))
 
       (:article
        (destructuring-bind (year month date) (mapcar #'parse-integer (list year month date))
