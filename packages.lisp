@@ -6,23 +6,23 @@
 (defpackage :trumpet
   (:use
    :cl
-   :whistle
-   :toot ;; FIXME -- probably should be able to use WHISTLE without having to also use TOOT.
-   :comments
+   :cl-ppcre
    :com.gigamonkeys.json
    :com.gigamonkeys.pathnames
+   :com.gigamonkeys.spam
    :com.gigamonkeys.utilities
-   :cl-ppcre
+   :comments
    :monkeylib-atom
    :monkeylib-html
-   :com.gigamonkeys.spam
-   :com.gigamonkeys.markup
-   :com.gigamonkeys.markup.html
-   :com.gigamonkeys.markup.html.handy-tags)
-
-  (:import-from :com.gigamonkeys.markup.html.handy-tags :amazon-link :amazon-image-bug)
+   :toot ;; FIXME -- probably should be able to use WHISTLE without having to also use TOOT.
+   :whistle
+   )
 
   (:export
    :blog-handler
    :define-template
-   :comment-db))
+   :comment-db
+   :render-page
+   :index-page
+   :category-page
+   :article-page))

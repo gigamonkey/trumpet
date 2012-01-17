@@ -6,15 +6,12 @@
   :depends-on (:whistle
                :comments
                :com.gigamonkeys.json
-               :com.gigamonkeys.markup
                :com.gigamonkeys.utilities
                :cl-ppcre
-               :monkeylib-markup-html
                :monkeylib-html
                :monkeylib-atom)
   :components ((:file "packages")
                (:file "trumpet" :depends-on ("packages"))
                (:file "plunk" :depends-on ("packages"))
                (:file "templates" :depends-on ("packages" "plunk"))
-               (:file "comments" :depends-on ("packages"))
-               (:file "markup-to-html" :depends-on ("packages"))))
+               (:file "comments" :depends-on ("packages"))))

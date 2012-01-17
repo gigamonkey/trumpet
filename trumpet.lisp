@@ -19,14 +19,19 @@
 
 (defclass blog-handler ()
   ((root :initarg :root :accessor root)
+   (renderer :initarg :renderer :accessor renderer)
    (comment-db :accessor comment-db)
    (feed :accessor the-feed)))
 
 (defmethod initialize-instance :after ((blog blog-handler) &key &allow-other-keys)
   (with-slots (feed root comment-db) blog
-    (setf root (merge-pathnames root))
+    (setf root (truename (merge-pathnames root)))
     (setf feed (parse-feed (merge-pathnames "content/feed.sexp" root)))
     (setf comment-db (open-comments-db (merge-pathnames "comments/" root) #'extract-features))))
+
+
+(defgeneric render-page (renderer page feed &key &allow-other-keys)
+  (:documentation "Render one of the blog pages."))
 
 (defmethod generate-response ((blog blog-handler) request &key what year month date name category)
   (let ((feed (the-feed blog)))
@@ -38,37 +43,23 @@
       (:index
        (with-response-body (s request)
          (with-html-output (s)
-           (index-page
-            :title (title feed)
-            :feed-url (feed-url feed)
-            :entries (entries feed)
-            :categories (categories feed)))))
+           (render-page (renderer blog) 'index-page feed))))
 
       (:by-category
        (with-response-body (s request)
          (with-html-output (s)
-           (index-page
-            :title (title feed)
-            :feed-url (feed-url feed)
-            :entries (entries feed)
-            :category category
-            :categories (categories feed)))))
+           (render-page (renderer blog) 'category-page feed :category category))))
 
       (:article
        (destructuring-bind (year month date) (mapcar #'parse-integer (list year month date))
          (let ((entry (find-entry feed year month date name)))
            (with-response-body (s request)
              (with-html-output (s)
-               (article-page
-                :blog blog
-                :blog-title (title feed)
-                :feed-url (feed-url feed)
-                :title (title entry)
-                :file (file entry)
-                :published (published entry)
-                :updated (updated entry)
-                :path (request-path request)
-                :user-name (cookie-value "comment_name" request)))))))
+               (render-page (renderer blog) 'article-page feed
+                            :blog blog
+                            :entry entry
+                            :path (request-path request)
+                            :user-name (cookie-value "comment_name" request)))))))
 
       (:post-comment (post-comment blog request))
 
@@ -85,7 +76,8 @@
          (with-html-output (s)
            (spam-admin-page))))
 
-      (:spam-admin-batch (spam-admin/next-batch blog request)))))
+      (:spam-admin-batch
+       (spam-admin/next-batch blog request)))))
 
 (defun find-entry (feed year month date name)
   (let ((key (list year month date name)))
