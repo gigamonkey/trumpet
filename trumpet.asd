@@ -6,7 +6,6 @@
   :depends-on (:whistle
                :comments
                :com.gigamonkeys.json
-               :com.gigamonkeys.utilities
                :com.gigamonkeys.markup
                :com.gigamonkeys.utilities
                :cl-ppcre
