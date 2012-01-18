@@ -19,13 +19,31 @@
 
 (defclass blog-handler ()
   ((root :initarg :root :accessor root)
-   (renderer :initarg :renderer :accessor renderer)
+   (renderer :accessor renderer)
    (comment-db :accessor comment-db)
    (feed :accessor the-feed)))
 
+(defmethod register-plugin ((blog blog-handler) server)
+  (with-slots (root) blog
+    (let ((blog-static (make-instance 'whistle::whistle-static-file-handler :root (merge-pathnames "static/" root))))
+      (add-url server "^/blog/$" blog :what :index)
+      (add-url server "^/blog/feed.atom$" blog :what :feed)
+      (add-url server "^/blog/(\\w+)/$" blog :what :by-category :category '$1)
+      (add-url server "^/blog/(\\d+)/(\\d+)/(\\d+)/(.*)$" blog :what :article :year '$1 :month '$2 :date '$3 :name '$4)
+      (add-url server "^/blog/(.*)" blog-static :path '$1)
+
+      (add-url server "^/comments/spam/classify$" blog :what :classify-comment)
+      (add-url server "^/comments/spam/declassify$" blog :what :declassify-comment)
+      (add-url server "^/comments/spam/explain$" blog :what :explain-comment)
+      (add-url server "^/comments/spam/db$" blog :what :spam-db)
+      (add-url server "^/comments/spam/admin$" blog :what :spam-admin)
+      (add-url server "^/comments/spam/admin/batch$" blog :what :spam-admin-batch)
+      (add-url server "^/comments/(.*)$" blog :what :post-comment))))
+
 (defmethod initialize-instance :after ((blog blog-handler) &key &allow-other-keys)
-  (with-slots (feed root comment-db) blog
+  (with-slots (root renderer feed comment-db) blog
     (setf root (truename (merge-pathnames root)))
+    (setf renderer (second (assoc :renderer (file->list (merge-pathnames "config.sexp" root)))))
     (setf feed (parse-feed (merge-pathnames "content/feed.sexp" root)))
     (setf comment-db (open-comments-db (merge-pathnames "comments/" root) #'extract-features))))
 
